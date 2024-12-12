@@ -3,6 +3,7 @@ from capymoa.anomaly import (
     HalfSpaceTrees,
     OnlineIsolationForest,
     Autoencoder,
+    TreeBasedUnsupervised
 )
 from capymoa.base import Classifier, AnomalyDetector
 from capymoa.base import MOAClassifier
@@ -21,11 +22,13 @@ from capymoa.stream._stream import Schema
         (partial(HalfSpaceTrees, window_size=100, number_of_trees=25, max_depth=15), 0.54, None),
         (partial(OnlineIsolationForest, window_size=100, num_trees=32, max_leaf_samples=32), 0.49, None),
         (partial(Autoencoder, hidden_layer=2, learning_rate=0.5, threshold=0.6), 0.42, None),
+        (partial(TreeBasedUnsupervised, num_trees=25, max_height=10, window_size=100), 0.54, None),
     ],
     ids=[
         "HalfSpaceTrees",
         "OnlineIsolationForest",
         "Autoencoder",
+        "TreeBasedUnsupervised",
     ],
 )
 def test_anomaly_detectors(
@@ -46,7 +49,6 @@ def test_anomaly_detectors(
     """
     stream = ElectricityTiny()
     evaluator = AnomalyDetectionEvaluator(schema=stream.get_schema())
-
     learner: AnomalyDetector = learner_constructor(schema=stream.get_schema())
 
     while stream.has_more_instances():
@@ -60,6 +62,7 @@ def test_anomaly_detectors(
     assert actual_auc == pytest.approx(
         auc, abs=0.01
     ), f"Basic Eval: Expected accuracy of {auc:0.1f} got {actual_auc: 0.01f}"
+    
 
     # Optionally check the CLI string if it was provided
     if isinstance(learner, MOAClassifier) and cli_string is not None:
