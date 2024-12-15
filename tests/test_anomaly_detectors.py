@@ -22,7 +22,7 @@ from capymoa.stream._stream import Schema
         (partial(HalfSpaceTrees, window_size=100, number_of_trees=25, max_depth=15), 0.54, None),
         (partial(OnlineIsolationForest, window_size=100, num_trees=32, max_leaf_samples=32), 0.49, None),
         (partial(Autoencoder, hidden_layer=2, learning_rate=0.5, threshold=0.6), 0.42, None),
-        (partial(TreeBasedUnsupervised, num_trees=25, max_height=10, window_size=100), 0.54, None),
+        (partial(TreeBasedUnsupervised, num_trees=40, max_height=20, window_size=100, random_seed=1), 0.54, None),
     ],
     ids=[
         "HalfSpaceTrees",
@@ -48,14 +48,22 @@ def test_anomaly_detectors(
     :param cli_string: Expected CLI string for the learner or None
     """
     stream = ElectricityTiny()
+    print('defining stream')
     evaluator = AnomalyDetectionEvaluator(schema=stream.get_schema())
+    print('defining evaluator')
     learner: AnomalyDetector = learner_constructor(schema=stream.get_schema())
+    print('defining learner')
 
     while stream.has_more_instances():
         instance = stream.next_instance()
+        #score_instance is going to compute anomaly score for a given data instance 
         score = learner.score_instance(instance)
+        print(type(score))
+        print(score)
         evaluator.update(instance.y_index, score)
         learner.train(instance)
+
+    print('finished training')
 
     # Check if the AUC score matches the expected value for both evaluator types
     actual_auc = evaluator.auc()
