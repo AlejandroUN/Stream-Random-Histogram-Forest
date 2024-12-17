@@ -2,7 +2,7 @@ import numpy as np
 from scipy.stats import kurtosis
 import random
 import time
-from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.metrics import roc_auc_score, average_precision_score, roc_curve, auc
 import pandas as pd
 
 # Random Histogram Tree Node
@@ -62,12 +62,15 @@ def compute_kurtosis(data):
         kurtosis_values[feature_idx] = np.log(kurtosis_value + 1)
 
     #print('output shape in compute_kurtosis: ', kurtosis_values.shape)
+    #print('kurtosis values ' + str(kurtosis_values))
+    #print('for the input data' + str(data))
     return kurtosis_values
 
 # Function to randomly choose a splitting attribute based on kurtosis
 def choose_split_attribute(kurt_values, random_seed):
     np.random.seed(random_seed)
     Ks = np.sum(kurt_values)
+    #print('the sum of the kurtosis is ' + str(Ks))
     r = np.random.uniform(0, Ks)
     cumulative = 0
     for idx, k_value in enumerate(kurt_values):
@@ -78,10 +81,11 @@ def choose_split_attribute(kurt_values, random_seed):
 
 # Random Histogram Tree (RHT) Build Function, builds ONE tree
 def RHT_build(data, height, max_height, seed_array):
+    #print('type of data in RHT_build ' + str(type(data)))
     node = Node(data, height, max_height, seed_array[height])
     if height == max_height or len(data) <= 1:
         return node  # Return leaf node if max height is reached or data is small
-    
+    #print('calling kurtosis from RHT_build')
     kurt_values = compute_kurtosis(data)
     attribute = choose_split_attribute(kurt_values, node.seed)
     split_value = np.random.uniform(np.min(data[:, attribute]), np.max(data[:, attribute]))
@@ -99,6 +103,7 @@ def RHT_build(data, height, max_height, seed_array):
 # Insert New Instance into Tree (Algorithm 1)
 def insert(node, instance, max_height, seed_array):
     if not node.is_leaf():
+        #print('calling kurtosis from insert')
         kurt_values = compute_kurtosis(np.vstack((node.data, instance)))
         new_attribute = choose_split_attribute(kurt_values, seed_array[node.height])
         if node.attribute != new_attribute:
@@ -116,15 +121,37 @@ def insert(node, instance, max_height, seed_array):
     return node
 
 # Score Calculation for a Single Instance (Equation 4)
-def score_instance(tree, instance):
+def score_instance(tree, instance, total_instances):
+    """
+    Calculates the anomaly score of an instance in a single tree.
+
+    Args:
+        tree: The root of the tree (Node object).
+        instance: The instance to score.
+        total_instances: The total number of instances seen by the tree.
+
+    Returns:
+        The anomaly score of the instance based on Shannon's Information Content.
+    """
     node = tree
+    # Traverse the tree until reaching the appropriate leaf
     while not node.is_leaf():
         if instance[node.attribute] <= node.value:
             node = node.left
         else:
             node = node.right
-    leaf_size = len(node.data)
-    return np.log(1 / (leaf_size + 1e-10))  # Avoid division by zero
+
+    # Get the size of the leaf (distinct instances)
+    leaf_size = len(np.unique(node.data, axis=0))  # Use unique instances in the leaf
+
+    # Calculate P(Q) = |S(Q)| / n
+    P_Q = leaf_size / total_instances
+
+    # Calculate the anomaly score: log(1 / P(Q)) = log(n / |S(Q)|)
+    anomaly_score = np.log(1 / (P_Q + 1e-10))  # Adding epsilon to prevent division by zero
+    #print(f"Anomaly score for the instance: {anomaly_score}")
+    return anomaly_score
+
 
 # Random Histogram Forest (RHF)
 class RandomHistogramForest:
@@ -159,25 +186,38 @@ class RandomHistogramForest:
             self.reference_window = self.current_window[-self.window_size:]
             self.current_window = []
             
-            # Rebuild the forest from scratch using the reference window
-            self.initialize_forest()
-            for instance in self.reference_window:
-                for i, tree in enumerate(self.forest):
-                    self.forest[i] = insert(tree, instance, self.max_height, self.seed_arrays[i])
+            # Rebuild the forest directly from the reference window
+            self.forest = []
+            for i in range(self.num_trees):
+                # Each tree is built directly using the reference window
+                tree = RHT_build(np.array(self.reference_window), 0, self.max_height, self.seed_arrays[i])
+                self.forest.append(tree)
         
         # Insert the new instance into the forest (each tree)
         for i, tree in enumerate(self.forest):
             self.forest[i] = insert(tree, instance, self.max_height, self.seed_arrays[i])
     
+    #def score(self, instance):
+    #    return np.sum([score_instance(tree, instance) for tree in self.forest])
     def score(self, instance):
-        return np.sum([score_instance(tree, instance) for tree in self.forest])
+        """
+        Calculates the anomaly score for an instance across the entire forest.
+
+        Args:
+            instance: The instance to score.
+
+        Returns:
+            The aggregated anomaly score across all trees.
+        """
+        total_instances = sum(len(np.unique(tree.data, axis=0)) for tree in self.forest)  # Total instances across the forest
+        return np.sum([score_instance(tree, instance, total_instances) for tree in self.forest])
     
 
 # STREAMRHF (Algorithm 2)
-def STREAMRHF(data_stream, max_height, num_trees, window_size):
+def STREAMRHF(data_stream, max_height, num_trees, window_size, number_of_features):
     scores = []
     forest = RandomHistogramForest(num_trees, max_height, window_size, 
-                                   number_of_features=data_stream.shape[1]) 
+                                   number_of_features) 
     forest.initialize_forest()
     
     for idx, instance in enumerate(data_stream):        
@@ -214,7 +254,12 @@ window_size = 19
 start_time = time.time()
 
 # Run STREAMRHF
-anomaly_scores = STREAMRHF(data_stream, max_height, num_trees, window_size)
+anomaly_scores = STREAMRHF(data_stream, max_height, num_trees, window_size, data_stream.shape[1])
+np.save("anomaly_scores.npy", anomaly_scores)
+
+# Load the anomaly scores from the .npy file
+#loaded_scores = np.load("anomaly_scores.npy")
+#print("Loaded scores:", loaded_scores[:20])  # Display the first 20 scores
 
 # Calculate Execution Time
 end_time = time.time()
@@ -223,11 +268,14 @@ execution_time = end_time - start_time
 # Calculate AUC Score
 auc_score = roc_auc_score(labels, anomaly_scores)
 
+fpr, tpr, thresholds = roc_curve(labels, anomaly_scores)
+
 # Calculate Average Precision Score
 ap_score = average_precision_score(labels, anomaly_scores)
 
 # Output results
 print(f"First 20 anomaly scores: {anomaly_scores[:20]}")
 print(f"Execution Time: {execution_time:.2f} seconds")
-print(f"AUC Score: {auc_score:.4f}")
+print(f"AUC Score from sklearn: {auc_score:.4f}")
+print("AUC Score from paper:", auc(fpr, tpr))
 print(f"Average Precision Score: {ap_score:.4f}")
