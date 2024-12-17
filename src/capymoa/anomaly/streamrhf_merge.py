@@ -216,7 +216,7 @@ class RHF(object):
 		self.has_duplicates = False
 		self.check_duplicates = check_duplicates
 		self.split_criterion = split_criterion
-		self.z = z	
+		self.z = z
 
 
 	def insert(self, tree, node, tree_index, xi):
@@ -334,7 +334,7 @@ class RHF(object):
  
 if __name__ == "__main__":
 	dataset_name = "abalone"
-	path = f"C:/Users/giova/Downloads/wetransfer_forstefan_2024-12-13_1400/forStefan/data/public/{dataset_name}.gz"
+	path = f"C:/Users/aleja/OneDrive - Universidad Nacional de Colombia/Documentos/Institut Polytechnique de Paris/courses/P1/Data Streaming/project/actual code/datasets/forStefan/data/public/{dataset_name}.gz"
 	df = pd.read_csv(path)
 	labels = df['label'].to_numpy(dtype='float32')
 	data = df.drop('label', axis=1).to_numpy(dtype='float32')
