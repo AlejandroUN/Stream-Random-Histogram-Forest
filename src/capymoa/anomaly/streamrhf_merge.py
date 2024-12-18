@@ -333,7 +333,7 @@ class RHF(object):
 		self.data_hash = data.apply(lambda row: hash('-'.join([str(x) for x in row])), axis=1)	
  
 if __name__ == "__main__":
-	dataset_name = "abalone"
+	dataset_name = "satimages"
 	path = f"C:/Users/giova/Downloads/wetransfer_forstefan_2024-12-13_1400/forStefan/data/public/{dataset_name}.gz"
 	df = pd.read_csv(path)
 	labels = df['label'].to_numpy(dtype='float32')
