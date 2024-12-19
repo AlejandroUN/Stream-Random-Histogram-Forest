@@ -2,7 +2,8 @@ import sys
 import time 
 from sklearn.metrics import average_precision_score, roc_curve, auc
 import numpy as np
-import rhf_stream_test as rhfs
+#import rhf_stream_test as rhfs
+import rhf_stream_test_capymoa as rhfs
 import utils
 
 #if len(sys.argv) < 8:

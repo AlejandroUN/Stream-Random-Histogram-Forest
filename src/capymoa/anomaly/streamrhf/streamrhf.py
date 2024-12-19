@@ -235,7 +235,8 @@ def STREAMRHF(data_stream, max_height, num_trees, window_size, number_of_feature
 
 # Example of how to use the STREAMRHF
 
-dataset_name = "abalone"
+#dataset_name = "abalone"
+dataset_name = "thyroid"
 path = f"C:/Users/aleja/OneDrive - Universidad Nacional de Colombia/Documentos/Institut Polytechnique de Paris/courses/P1/Data Streaming/project/actual code/datasets/forStefan/data/public/{dataset_name}.gz"
 df = pd.read_csv(path)
 
@@ -248,7 +249,8 @@ print("data: ", data_stream.shape)
 # Parameters
 max_height = 5
 num_trees = 100
-window_size = 19
+#window_size = 19
+window_size = 38
 
 # Measure Execution Time
 start_time = time.time()

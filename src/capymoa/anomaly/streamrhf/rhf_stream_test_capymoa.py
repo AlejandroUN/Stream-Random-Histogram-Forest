@@ -21,6 +21,7 @@ class Leaves:
     #each leaf has a capacity of storing up to W_MAX data points or indices.
     #this constraint ensures that the memory allocation for each leaf is bounded.
     #I think we can make it better by using a dynamic array for each leaf instead of a fixed size array.
+    #or defining the max just as the window
     def __init__(self, t, H, W_MAX):
         # 2**H = max number of leaves, W_MAX = max number of elements per leaf
         # all set to -1
@@ -68,6 +69,8 @@ def anomaly_score_ids_incr(leaf_indexes, insertionDS, t, n):
 
 def rhf_stream(data, t, h, N_init_pts):
     n, d = data.shape
+    #this value should be set by the maximum number of elements in a leaf
+    n = 20000
     W_MAX = n
     index_range = np.empty([t], dtype=int)
     leaf_indexes = np.empty([t], dtype=int)
@@ -107,24 +110,56 @@ def rhf_stream(data, t, h, N_init_pts):
 
     t0 = timeit.default_timer()
     for i in range(N_init_pts, n):
-        #loop through the trees
-        for j in range(t):
-            leaf_indexes[j] = insert(data, moments[j], splits, h, insertionDS, kurtosis_arr, new_indexes, i, j, r_values[j])
-        
-        scores[i] = anomaly_score_ids_incr(leaf_indexes, insertionDS, t, N_init_pts + (i % N_init_pts) + 1)
-    
-        if (i+1) % N_init_pts == 0:
-            insertionDS = Leaves(t, h, W_MAX)
-            splits = Split(t, h, d)
-            for j in range(t):
-                index_range = np.arange(i-N_init_pts+1, i+1, dtype=int)
-                indexes[j] = index_range
-                rht(data, indexes[j], insertionDS, splits, moments[j], kurtosis_arr, 0, N_init_pts-1, 0, h, d, 0, j, r_values[j]) 
+        process_data_instance(i, data, moments, splits, h, insertionDS, kurtosis_arr, new_indexes, leaf_indexes, scores, r_values, t, N_init_pts, indexes, W_MAX, d)
     
     t1 = timeit.default_timer()
     print("Total time for insertions=", t1 - t0)
           
     return scores
+
+def process_data_instance(i, data, moments, splits, h, insertionDS, kurtosis_arr, new_indexes, leaf_indexes, scores, r_values, t, N_init_pts, indexes, W_MAX, d):
+    """
+    Process a single data instance (i) across all trees and compute the anomaly score.
+
+    Parameters:
+        i (int): Current data point index.
+        data (ndarray): The dataset.
+        moments (list): Statistical moments for the trees.
+        splits (Split): Split structure for the trees.
+        h (int): Height of the tree.
+        insertionDS (Leaves): Leaves structure for the trees.
+        kurtosis_arr (ndarray): Kurtosis values.
+        new_indexes (list): Indexes for new data points.
+        leaf_indexes (list): Leaf indexes for each tree.
+        scores (ndarray): Anomaly scores.
+        r_values (ndarray): Random thresholds or parameters.
+        t (int): Number of trees.
+        N_init_pts (int): Number of initial data points.
+        indexes (list): Index ranges for trees.
+        W_MAX (int): Maximum number of elements per leaf.
+        d (int): Dimensionality of data.
+    
+    Returns:
+        None: Updates `leaf_indexes`, `scores`, `insertionDS`, and `splits` in place.
+    """
+    # Process each tree
+    for j in range(t):
+        leaf_indexes[j] = insert(data, moments[j], splits, h, insertionDS, kurtosis_arr, new_indexes, i, j, r_values[j])
+    
+    # Compute the anomaly score for the current data point
+    scores[i] = anomaly_score_ids_incr(leaf_indexes, insertionDS, t, N_init_pts + (i % N_init_pts) + 1)
+
+    # Reset data structures periodically
+    if (i + 1) % N_init_pts == 0:
+        print("Forest number " + str(i // N_init_pts) + " scored.")
+        print("Current instance number: ", i)
+        insertionDS = Leaves(t, h, W_MAX)
+        splits = Split(t, h, d)
+        for j in range(t):
+            index_range = np.arange(i - N_init_pts + 1, i + 1, dtype=int)
+            indexes[j] = index_range
+            rht(data, indexes[j], insertionDS, splits, moments[j], kurtosis_arr, 0, N_init_pts - 1, 0, h, d, 0, j, r_values[j])
+
 
 def sort(data, indexes, start, end, a, a_val):
     i = start
