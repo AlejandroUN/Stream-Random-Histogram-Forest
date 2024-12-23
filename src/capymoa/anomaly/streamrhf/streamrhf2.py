@@ -1,4 +1,10 @@
 import numpy as np
+import random
+import math
+from capymoa.base import AnomalyDetector
+from capymoa.instance import Instance
+from capymoa.type_alias import AnomalyScore
+import numpy as np
 from scipy.stats import kurtosis
 import random
 import time
@@ -21,8 +27,23 @@ class Node:
 
     def is_leaf(self):
         return self.left is None and self.right is None
+    
+def collect_subtree_data(node, number_of_features):
+    if node is None:
+        return np.empty((0, number_of_features))  # Return empty array for null nodes
+
+    # Collect data from the current node and its children
+    collected_data = node.data if node.data is not None else np.empty((0, number_of_features))
+    if not node.is_leaf():
+        left_data = collect_subtree_data(node.left, number_of_features)
+        right_data = collect_subtree_data(node.right, number_of_features)
+        collected_data = np.vstack((collected_data, left_data, right_data))
+    return collected_data
+
 
 def compute_kurtosis(data):
+    if len(data) == 0:
+        return np.zeros(data.shape[1])  # Return zero kurtosis for empty data
     data = np.asarray(data)
     kurtosis_values = np.zeros(data.shape[1])
     for feature_idx in range(data.shape[1]):
@@ -46,8 +67,9 @@ def choose_split_attribute(kurt_values, random_seed):
     return len(kurt_values) - 1
 
 def RHT_build(data, height, max_height, seed_array, node_id=1):
-    node = Node(data, height, max_height, seed_array[node_id], node_id)
+    node = Node(None, height, max_height, seed_array[node_id], node_id)
     if height == max_height or len(data) <= 1:
+        node.data = data  # Only store data at leaf nodes
         return node
 
     kurt_values = compute_kurtosis(data)
@@ -60,33 +82,36 @@ def RHT_build(data, height, max_height, seed_array, node_id=1):
     left_data = data[data[:, attribute] <= split_value]
     right_data = data[data[:, attribute] > split_value]
 
-    node.left = RHT_build(left_data, height + 1, max_height, seed_array, node_id=2*node_id)
-    node.right = RHT_build(right_data, height + 1, max_height, seed_array, node_id=(2*node_id)+1)
+    node.left = RHT_build(left_data, height + 1, max_height, seed_array, node_id=2 * node_id)
+    node.right = RHT_build(right_data, height + 1, max_height, seed_array, node_id=(2 * node_id) + 1)
+
     return node
 
 #I think we have to pay more attention to the node_id's here
 def insert(node, instance, max_height, seed_array):
     if not node.is_leaf():
-        kurt_values = compute_kurtosis(np.vstack((node.data, instance)))
-        #new_attribute = choose_split_attribute(kurt_values, seed_array[node.height])
+        # Handle the case where node.data is None
+        data_to_send = np.vstack((node.data, instance)) if node.data is not None else np.array([instance])
+        kurt_values = compute_kurtosis(data_to_send)
         new_attribute = choose_split_attribute(kurt_values, seed_array[node.node_id])  # Use the correct seed
 
         if node.attribute != new_attribute:
-            # Attribute mismatch; rebuild subtree from this node
-            #return RHT_build(np.vstack((node.data, instance)), node.height, max_height, seed_array, node_id=1)
-            return RHT_build(np.vstack((node.data, instance)), node.height, max_height, seed_array, node_id=node.node_id)
+            subtree_data = collect_subtree_data(node, data_to_send.shape[1])
+            return RHT_build(np.vstack((subtree_data, instance)), node.height, max_height, seed_array, node_id=node.node_id)
 
         if instance[node.attribute] <= node.value:
             node.left = insert(node.left, instance, max_height, seed_array)
         else:
             node.right = insert(node.right, instance, max_height, seed_array)
     else:
+        # Handle the case where node.data is None
+        data_to_send = np.vstack((node.data, instance)) if node.data is not None else np.array([instance])
         if node.height == max_height:
-            node.data = np.vstack((node.data, instance))
+            node.data = data_to_send
         else:
             # Since the max height has not been reached, we can continue to build the tree
             #return RHT_build(np.vstack((node.data, instance)), node.height, max_height, seed_array, node_id=1)
-            return RHT_build(np.vstack((node.data, instance)), node.height, max_height, seed_array, node_id=node.node_id)
+            return RHT_build(data_to_send, node.height, max_height, seed_array, node_id=node.node_id)
     return node
 
 def score_instance(tree, instance, total_instances):
@@ -97,13 +122,31 @@ def score_instance(tree, instance, total_instances):
         else:
             node = node.right
 
-    leaf_size = len(np.unique(node.data, axis=0))
+    leaf_size = len(node.data)
+    # Handle division by zero
+    if (total_instances == 0) or (leaf_size == 0): 
+        return 1 #float('inf')  # Still unsure if to assign the maximum or minimum anomaly score
+    if total_instances == leaf_size:
+        return 0
     P_Q = leaf_size / total_instances
-    anomaly_score = np.log(1 / (P_Q + 1e-10))
-    return anomaly_score
+    return np.log(1 / (P_Q + 1e-10))  # Compute the raw anomaly score
+
+def print_tree_info(node):
+    if node is None:
+        return
+
+    # Print information about the current node
+    print(f"Node ID: {node.node_id}, Height: {node.height}, Data Shape: {None if node.data is None else node.data.shape}")
+
+    # Recursively print information for left and right children
+    print_tree_info(node.left)
+    print_tree_info(node.right)
+
+
 
 class RandomHistogramForest:
     def __init__(self, num_trees, max_height, window_size, number_of_features):
+        print(window_size)
         self.num_trees = num_trees
         self.max_height = max_height
         self.window_size = window_size
@@ -120,6 +163,7 @@ class RandomHistogramForest:
         # Each tree gets a seed array for all possible nodes
         self.seed_arrays = [np.random.randint(0, 10000, size=num_nodes) for _ in range(self.num_trees)]
 
+        #this will just create the trees with empty data, just the root i'd say
         for i in range(self.num_trees):
             tree = RHT_build(np.empty((0, self.number_of_features)), 0, self.max_height, self.seed_arrays[i], node_id=1)
             self.forest.append(tree)
@@ -139,8 +183,18 @@ class RandomHistogramForest:
             self.forest[i] = insert(tree, instance, self.max_height, self.seed_arrays[i])
 
     def score(self, instance):
-        total_instances = sum(len(np.unique(tree.data, axis=0)) for tree in self.forest)
-        return np.sum([score_instance(tree, instance, total_instances) for tree in self.forest])
+        # Gather all unique instances from the first tree
+        total_instances = len(self.current_window)+len(self.reference_window)
+
+        # Compute the normalized anomaly score
+        score = np.sum([score_instance(tree, instance, total_instances) for tree in self.forest])
+        return score
+    
+    def print_forest_info(self):
+        for i, tree in enumerate(self.forest):
+            print(f"Tree {i + 1}:")
+            print_tree_info(tree)
+            print("-" * 50)
 
 def STREAMRHF(data_stream, max_height, num_trees, window_size, number_of_features):
     scores = []
@@ -162,9 +216,10 @@ print("Starting...")
 
 np.random.seed(42)
 
-dataset_name = "magicgamma"
-path = f"C:/Users/giova/Downloads/wetransfer_forstefan_2024-12-13_1400/forStefan/data/public/{dataset_name}.gz"
-#path = f"C:/Users/aleja/OneDrive - Universidad Nacional de Colombia/Documentos/Institut Polytechnique de Paris/courses/P1/Data Streaming/project/actual code/datasets/forStefan/data/public/{dataset_name}.gz"
+dataset_name = "thyroid"
+print(f"Dataset: {dataset_name}")
+#path = f"C:/Users/giova/Downloads/wetransfer_forstefan_2024-12-13_1400/forStefan/data/public/{dataset_name}.gz"
+path = f"C:/Users/aleja/OneDrive - Universidad Nacional de Colombia/Documentos/Institut Polytechnique de Paris/courses/P1/Data Streaming/project/actual code/datasets/forStefan/data/public/{dataset_name}.gz"
 df = pd.read_csv(path)
 
 labels = df['label'].to_numpy(dtype='float32')
