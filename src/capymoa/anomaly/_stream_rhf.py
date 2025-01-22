@@ -135,22 +135,6 @@ def score_instance(tree, instance, total_instances):
     min_score = np.log(total_instances/(total_instances + (1e-10)*total_instances))
     max_score = np.log(total_instances/(1 + (1e-10)*total_instances)) 
     normalized_score = (raw_anomaly_score - min_score) / (max_score - min_score + 1e-10)  # Avoid division by zero
-    if normalized_score > 1:
-        print('normalized_score bigger than 1:', normalized_score)
-        print('raw_anomaly_score:', raw_anomaly_score)
-        print('min_score:', min_score)
-        print('max_score:', max_score)
-        print('total_instances:', total_instances)
-        print('leaf_size:', leaf_size)
-        print('instance:', instance)
-    if normalized_score < 0:
-        print('normalized_score smaller than 0:', normalized_score)
-        print('raw_anomaly_score:', raw_anomaly_score)
-        print('min_score:', min_score)
-        print('max_score:', max_score)
-        print('total_instances:', total_instances)
-        print('leaf_size:', leaf_size)
-        print('instance:', instance)
 
     return normalized_score
 
@@ -219,6 +203,43 @@ class RandomHistogramForest:
             print("-" * 50)
     
 class StreamRHF(AnomalyDetector):
+    """StreamRHF anomaly detector
+
+    StreamRHF: Streaming Random Histogram Forest for Anomaly Detection
+
+    StreamRHF is an unsupervised anomaly detection algorithm tailored for 
+    real-time data streams. Building upon the principles of Random Histogram 
+    Forests (RHF), this algorithm extends its capabilities to handle dynamic 
+    data streams efficiently. StreamRHF combines the power of tree-based 
+    partitioning with kurtosis-driven feature selection to detect anomalies 
+    in a resource-constrained streaming environment.
+
+    Reference:
+
+    `STREAMRHF: Tree-Based Unsupervised Anomaly Detection for Data Streams.
+    Stefan Nesic, Andrian Putina, Maroua Bahri, Alexis Huet, Jose Manuel Navarro, Dario Rossi, Mauro Sozio.
+    
+    <https://nonsns.github.io/paper/rossi22aiccsa.pdf>`_
+
+    Example:
+
+    >>> from capymoa.datasets import ElectricityTiny
+    >>> from capymoa.anomaly import Autoencoder
+    >>> from capymoa.evaluation import StreamRHF
+    >>> stream = ElectricityTiny()
+    >>> schema = stream.get_schema()
+    >>> learner = StreamRHF(schema=schema)
+    >>> evaluator = AnomalyDetectionEvaluator(schema)
+    >>> while stream.has_more_instances():
+    ...     instance = stream.next_instance()
+    ...     proba = learner.score_instance(instance)
+    ...     evaluator.update(instance.y_index, proba)
+    ...     learner.train(instance)
+    >>> auc = evaluator.auc()
+    >>> print(f"AUC: {auc:.2f}")
+    AUC: 0.50
+
+    """
     def __init__(self, schema, max_height=5, num_trees=100, window_size=20):
         """
         Initialize the StreamRHF learner.
@@ -238,6 +259,7 @@ class StreamRHF(AnomalyDetector):
     def score_instance(self, instance):
         """
         Score a single instance.
+        A score value close to 0 means that is an anomaly and close to 1 it means it is a normal instance
         :param instance: An instance from the stream.
         :return: Anomaly score for the instance.
         """
@@ -252,12 +274,15 @@ class StreamRHF(AnomalyDetector):
         #instance_array = instance.x.reshape(1, -1)
         self.forest.update_forest(instance.x)
 
-    #not really the predict method, since we do not return a label
     def predict(self, instance):
         """
         Predict anomaly score for a single instance.
-        This is effectively the same as scoring the instance.
+        This method uses the anomaly score of the instance to classify it
+        as normal (0) or anomalous (1) based on a threshold.
         :param instance: An instance from the stream.
-        :return: Anomaly score for the instance.
+        :return: 0 if the instance is classified as normal, 1 if classified as anomalous.
         """
-        return self.score_instance(instance)
+        if self.score_instance(instance) > 0.5:
+            return 0
+        else:
+            return 1
