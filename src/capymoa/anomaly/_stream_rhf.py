@@ -286,3 +286,6 @@ class StreamRHF(AnomalyDetector):
             return 0
         else:
             return 1
+        
+    def __str__(self):
+        return "StreamRHF Anomaly Detector"
