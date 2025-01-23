@@ -27,3 +27,11 @@ The demo, which integrates the StreamRHF implementation with CapyMOA and include
 cd Stream-Random-Histogram-Forest/src/capymoa/anomaly/streamrhf/notebook_presentation.ipynb
 
 ```
+
+## **Contact**
+For any questions, feel free to reach out to:
+
+* giovanni.benedetti-da-rosa@polytechnique.edu
+* cristian.chavez-becerra@polytechnique.edu
+
+
