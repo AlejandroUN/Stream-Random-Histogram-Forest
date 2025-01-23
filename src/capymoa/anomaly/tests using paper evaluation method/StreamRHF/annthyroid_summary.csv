@@ -1,0 +1,6 @@
+Dataset,Model,Metric,Mean,CI (95%)
+annthyroid,StreamRHF,AP,0.32020626487523246,
+annthyroid,StreamRHF,AUC (sklearn),0.8202193814887107,
+annthyroid,StreamRHF,AUC (paper),0.8202193814887107,
+annthyroid,StreamRHF,AUC (CapyMOA),0.8202193814887107,
+annthyroid,StreamRHF,Execution Time,957.4710829257965,
