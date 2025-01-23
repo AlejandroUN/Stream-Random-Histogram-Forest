@@ -10,6 +10,6 @@ __all__ = [
     "OnlineIsolationForest",
     "Autoencoder",
     "TreeBasedUnsupervised",
-    "StreamRHF",
+    #"StreamRHF",
     "StreamRHFParallel",
 ]

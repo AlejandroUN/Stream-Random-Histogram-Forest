@@ -1,0 +1,6 @@
+Dataset,Model,Metric,Mean,CI (95%)
+kdd_ftp,StreamRHF,AP,0.16774529784571074,
+kdd_ftp,StreamRHF,AUC (sklearn),0.14445888168926285,
+kdd_ftp,StreamRHF,AUC (paper),0.14445888168926285,
+kdd_ftp,StreamRHF,AUC (CapyMOA),0.14445888168926285,
+kdd_ftp,StreamRHF,Execution Time,363.2430303096771,

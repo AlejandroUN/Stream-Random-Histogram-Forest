@@ -191,7 +191,10 @@ class RandomHistogramForest:
 
     def score(self, instance):
         # Gather all unique instances from the first tree
-        total_instances = len(self.current_window)+len(self.reference_window)
+        #total_instances = len(self.current_window)+len(self.reference_window)
+        
+        total_instances = (self.window_size*2)
+        #print('total instances ' + str(total_instances))
 
         # Compute the normalized anomaly score
         return np.mean([score_instance(tree, instance, total_instances) for tree in self.forest])

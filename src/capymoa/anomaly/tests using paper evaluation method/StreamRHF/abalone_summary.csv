@@ -1,0 +1,6 @@
+Dataset,Model,Metric,Mean,CI (95%)
+abalone,StreamRHF,AP,0.12627799405682313,
+abalone,StreamRHF,AUC (sklearn),0.8752986013603458,
+abalone,StreamRHF,AUC (paper),0.8752986013603458,
+abalone,StreamRHF,AUC (CapyMOA),0.8752986013603458,
+abalone,StreamRHF,Execution Time,259.0066657066345,
